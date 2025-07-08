@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Linked Charts</title>    
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+        }
+        h1 {
+            text-align: center;
+            margin: 20px 0;
+        }
+        .chart-container {
+    display: flex; /* 水平排列所有列 */
+    justify-content: center; /* 水平居中 */
+    align-items: flex-start; /* 顶部对齐 */
+    gap: 20px; /* 列之间的间距 */
+}
+
+.chart-column {
+    display: flex;
+    flex-direction: column; /* 垂直排列每列中的图表 */
+    align-items: center; /* 图表居中 */
+}
+
+.chart {
+    width: 400px; /* 图表宽度 */
+    height: 385px; /* 图表高度 */
+    margin: 20px; /* 图表之间的间距 */
+}
+
+
+
+        svg {
+            width: 100%;
+            height: 400px;
+        }
+        .axis-label {
+            font-size: 14px;
+            font-weight: bold;
+        }
+        .tooltip {
+            position: absolute;
+            text-align: center;
+            background: lightgray;
+            border: 1px solid black;
+            padding: 5px;
+            border-radius: 5px;
+            pointer-events: none;
+            opacity: 0;
+        }
+
+    .treemap-row {
+        display: flex;
+        justify-content: center; /* 水平居中 */
+        margin-top: 10px; /* 调整 Treemap 向下的位置 */
+    }
+
+    .treemap-row .chart {
+        width: 50%; /* 调整 Treemap 容器宽度 */
+        height: 400px; /* 固定高度 */
+    }
+    body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: linear-gradient(135deg, #0f2027, #203a43, #2c5364); /* 酷炫渐变背景色 */
+    color: white; /* 设置默认字体颜色为白色 */
+    min-height: 100vh; /* 确保背景铺满整个页面 */
+}
+h1 {
+    color: white; /* 修改页面主标题的颜色 */
+}
+
+text {
+    fill: white; /* 修改所有 D3 绘制的文本颜色，包括图表标题 */
+}
+
+.axis-label {
+    fill: white; /* 修改坐标轴标签的颜色 */
+}
+
+#heatmap {
+    overflow: visible; /* 确保X轴超出时不会被裁剪 */
+}
+
+svg {
+    overflow: visible; /* SVG内部元素可见 */
+}
+
+
+
+
+
+
+
+
+
+    
+</style>
+
+
+    
+</head>
+<body>
+    <h1>Interactive Linked Charts</h1>
+
+    <div class="chart-container">
+        <!-- 左侧的 Line Chart 和 Treemap -->
+        <div class="chart-column">
+            <div id="lineChart" class="chart"></div>
+            <div id="treemap" class="chart"></div>
+        </div>
+    
+        <!-- 中间的 Histogram 和 Waterfall Chart -->
+        <div class="chart-column">
+            <div id="histogram" class="chart"></div>
+            <div id="waterfallChart" class="chart"></div>
+        </div>
+    
+        <!-- 右侧的 Scatter Plot 和 Radar Chart -->
+        <div class="chart-column">
+            <div id="scatterPlot" class="chart"></div>
+            <div id="radarChart" style="width: 600px; height: 600px;"></div>
+
+        <div id="groupedBarChart" style="width: 600px; height: 600px;"></div>
+
+
+        
+
+
+        </div>
+    </div>
+    
+
+
+    
+    
+
+    <script>
+        const tooltip = d3.select("body")
+            .append("div")
+            .attr("class", "tooltip");
+
+        let globalData; // 保存全局数据
+
+        d3.csv("facilities_data.csv").then(data => {
+            globalData = data;
+            renderLineChart(globalData); // 渲染折线图
+            renderHistogram(globalData); // 默认渲染直方图（显示所有数据）
+            renderTreemap(globalData);
+            renderWaterfallChart(globalData);
+            renderScatterPlot(data);
+            renderScatterPlot(globalData);
+            renderHeatmap(data); 
+            renderRadarChart(data);
+            renderGroupedBarChart(data);
+
+
+        });
+
+        // 折线图：Top 10 专科医生数量
+        function renderLineChart(data) {
+            const counts = d3.rollup(data, v => v.length, d => d.Specialization);
+            const processedData = Array.from(counts, ([key, value]) => ({ specialization: key, count: value }))
+                .sort((a, b) => b.count - a.count)
+                .slice(0, 10);
+
+            const width = 400, height = 400, margin = { top: 50, right: 30, bottom: 100, left: 80 };
+
+            const x = d3.scaleBand()
+                .domain(processedData.map(d => d.specialization))
+                .range([margin.left, width - margin.right])
+                .padding(0.5);
+
+            const y = d3.scaleLinear()
+                .domain([0, d3.max(processedData, d => d.count)])
+                .nice()
+                .range([height - margin.bottom, margin.top]);
+
+            const svg = d3.select("#lineChart").append("svg").attr("width", width).attr("height", height);
+
+            svg.append("path")
+                .datum(processedData)
+                .attr("fill", "none")
+                .attr("stroke", "steelblue")
+                .attr("stroke-width", 2)
+                .attr("d", d3.line()
+                    .x(d => x(d.specialization) + x.bandwidth() / 2)
+                    .y(d => y(d.count))
+                    .curve(d3.curveCardinal)
+                );
+
+            svg.selectAll("circle")
+                .data(processedData)
+                .enter().append("circle")
+                .attr("cx", d => x(d.specialization) + x.bandwidth() / 2)
+                .attr("cy", d => y(d.count))
+                .attr("r", 5)
+                .attr("fill", "red")
+                .on("click", (event, d) => {
+                    // 更新直方图，传入选中的专科数据
+                    const filteredData = globalData.filter(row => row.Specialization === d.specialization);
+                    renderHistogram(filteredData, d.specialization);
+                })
+                .on("mouseover", (event, d) => {
+                    tooltip.transition().duration(200).style("opacity", 1);
+                    tooltip.html(`Specialization: ${d.specialization}<br>Count: ${d.count}`)
+                        .style("left", (event.pageX + 10) + "px")
+                        .style("top", (event.pageY - 20) + "px");
+                })
+                .on("mouseout", () => tooltip.transition().duration(200).style("opacity", 0));
+
+            svg.append("g")
+                .attr("transform", `translate(0,${height - margin.bottom})`)
+                .call(d3.axisBottom(x))
+                .selectAll("text")
+                .attr("transform", "rotate(-45)")
+                .style("text-anchor", "end");
+
+            svg.append("g")
+                .attr("transform", `translate(${margin.left},0)`)
+                .call(d3.axisLeft(y));
+
+            svg.append("text").attr("class", "axis-label")
+                .attr("x", width / 2).attr("y", height - 10).style("text-anchor", "middle").text("Specializations");
+
+            svg.append("text").attr("class", "axis-label")
+                .attr("x", -(height / 2)).attr("y", 20).attr("transform", "rotate(-90)").style("text-anchor", "middle").text("Doctor Count");
+        }
+
+        // 直方图：医生的经验分布
+        function renderHistogram(data, specialization = "All Specializations") {
+            d3.select("#histogram").html(""); // 清空旧图表
+
+            const experiences = data.map(d => +d["Experience(Years)"]);
+            const width = 400, height = 400, margin = { top: 50, right: 30, bottom: 50, left: 80 };
+
+            const x = d3.scaleLinear()
+                .domain([0, d3.max(experiences)])
+                .range([margin.left, width - margin.right]);
+
+            const histogram = d3.histogram()
+                .domain(x.domain())
+                .thresholds(x.ticks(10));
+
+            const bins = histogram(experiences);
+
+            const y = d3.scaleLinear()
+                .domain([0, d3.max(bins, d => d.length)])
+                .range([height - margin.bottom, margin.top]);
+
+            const svg = d3.select("#histogram").append("svg").attr("width", width).attr("height", height);
+
+            svg.selectAll("rect")
+                .data(bins)
+                .enter().append("rect")
+                .attr("x", d => x(d.x0))
+                .attr("y", d => y(d.length))
+                .attr("width", d => x(d.x1) - x(d.x0) - 1)
+                .attr("height", d => y(0) - y(d.length))
+                .attr("fill", "steelblue");
+
+            svg.append("g")
+                .attr("transform", `translate(0,${height - margin.bottom})`)
+                .call(d3.axisBottom(x));
+
+            svg.append("g")
+                .attr("transform", `translate(${margin.left},0)`)
+                .call(d3.axisLeft(y));
+
+            svg.append("text").attr("class", "axis-label")
+                .attr("x", width / 2).attr("y", height - 10).style("text-anchor", "middle").text("Experience (Years)");
+
+            svg.append("text").attr("class", "axis-label")
+                .attr("x", -(height / 2)).attr("y", 20).attr("transform", "rotate(-90)").style("text-anchor", "middle").text("Doctor Count");
+
+            svg.append("text")
+                .attr("x", width / 2)
+                .attr("y", margin.top / 2)
+                .attr("text-anchor", "middle")
+                .style("font-size", "16px")
+                .text(`Experience Distribution: ${specialization}`);
+        }
+// 4. Treemap: Show doctors by specialization with bubble size based on average experience
+function renderTreemap(data) {
+    const width = 400, height = 400;
+
+    // 计算每个专科的平均经验年限
+    const groupedData = d3.rollup(data, v => d3.mean(v, d => +d["Experience(Years)"]), d => d.Specialization);
+
+    // 转换为数组格式，并排序取前 10 个专科
+    const processedData = Array.from(groupedData, ([key, value]) => ({ specialization: key, experience: value }))
+        .sort((a, b) => b.experience - a.experience)
+        .slice(0, 10);
+
+    // 构建 Treemap 数据结构
+    const root = d3.hierarchy({ children: processedData })
+        .sum(d => d.experience);
+
+    d3.treemap()
+        .size([width, height])
+        .padding(1)(root);
+
+    const svg = d3.select("#treemap").append("svg").attr("width", width).attr("height", height);
+
+    const cell = svg.selectAll("g")
+        .data(root.leaves())
+        .enter().append("g")
+        .attr("transform", d => `translate(${d.x0},${d.y0})`);
+
+    // 绘制矩形
+    cell.append("rect")
+        .attr("width", d => d.x1 - d.x0)
+        .attr("height", d => d.y1 - d.y0)
+        .attr("fill", "lightblue")
+        .on("mouseover", (event, d) => {
+            tooltip.style("opacity", 1)
+                .html(`Specialization: ${d.data.specialization}<br>Avg Experience: ${d.data.experience.toFixed(2)}`)
+                .style("left", (event.pageX + 10) + "px")
+                .style("top", (event.pageY - 20) + "px");
+        })
+        .on("mouseout", () => tooltip.style("opacity", 0));
+
+    // 添加文本（截断过长的专科名）
+    cell.append("text")
+        .attr("x", 5)
+        .attr("y", 15)
+        .style("font-size", "10px")
+        .text(d => d.data.specialization.length > 10 ? d.data.specialization.slice(0, 10) + "..." : d.data.specialization);
+}
+// 5. Waterfall Chart: Patient Reviews per Specialization
+function renderWaterfallChart(data) {
+    const width = 400, height = 400, margin = { top: 20, right: 20, bottom: 100, left: 60 };
+
+    // 计算每个专科的评论数
+    const grouped = d3.rollup(data, v => d3.sum(v, d => +d["Total_Reviews"]), d => d.Specialization);
+
+    // 转换为数组并按评论数排序取前 10 个专科
+    const processedData = Array.from(grouped, ([key, value]) => ({ specialization: key, reviews: value }))
+        .sort((a, b) => b.reviews - a.reviews)
+        .slice(0, 10);
+
+    // 设置比例尺
+    const x = d3.scaleBand()
+        .domain(processedData.map(d => d.specialization))
+        .range([margin.left, width - margin.right])
+        .padding(0.5);
+
+    const y = d3.scaleLinear()
+        .domain([0, d3.max(processedData, d => d.reviews)])
+        .nice()
+        .range([height - margin.bottom, margin.top]);
+
+    // 创建 SVG 容器
+    const svg = d3.select("#waterfallChart").append("svg")
+        .attr("width", width)
+        .attr("height", height);
+
+    // 绘制柱子
+    svg.selectAll("rect")
+        .data(processedData)
+        .enter().append("rect")
+        .attr("x", d => x(d.specialization))
+        .attr("y", d => y(d.reviews))
+        .attr("width", x.bandwidth())
+        .attr("height", d => y(0) - y(d.reviews))
+        .attr("fill", "steelblue")
+        .on("mouseover", (event, d) => {
+            tooltip.style("opacity", 1)
+                .html(`Specialization: ${d.specialization}<br>Reviews: ${d.reviews}`)
+                .style("left", (event.pageX + 10) + "px")
+                .style("top", (event.pageY - 20) + "px");
+        })
+        .on("mouseout", () => tooltip.style("opacity", 0));
+
+    // 添加 X 轴
+    svg.append("g")
+        .attr("transform", `translate(0,${height - margin.bottom})`)
+        .call(d3.axisBottom(x))
+        .selectAll("text")
+        .attr("transform", "rotate(-45)")
+        .style("text-anchor", "end");
+
+    // 添加 Y 轴
+    svg.append("g")
+        .attr("transform", `translate(${margin.left},0)`)
+        .call(d3.axisLeft(y).ticks(5));
+
+    // 添加标题
+    svg.append("text")
+        .attr("x", width / 2)
+        .attr("y", margin.top / 2)
+        .attr("text-anchor", "middle")
+        .style("font-size", "16px")
+        .text("Patient Reviews per Specialization");
+}
+// Scatter Plot: Experience vs Reviews
+function renderScatterPlot(data) {
+    const width = 400, height = 400, margin = { top: 20, right: 30, bottom: 50, left: 60 };
+
+    // 数据预处理：选择经验年限和总评论数
+    const processedData = data.map(d => ({
+        experience: +d["Experience(Years)"],
+        reviews: +d["Total_Reviews"]
+    })).filter(d => d.experience && d.reviews); // 去除无效数据
+
+    // 设置 X 和 Y 轴比例尺
+    const x = d3.scaleLinear()
+        .domain([0, d3.max(processedData, d => d.experience)])
+        .range([margin.left, width - margin.right]);
+
+    const y = d3.scaleLinear()
+        .domain([0, d3.max(processedData, d => d.reviews)])
+        .range([height - margin.bottom, margin.top]);
+
+    // 创建 SVG 容器
+    const svg = d3.select("#scatterPlot").html("") // 清空之前内容
+        .append("svg")
+        .attr("width", width)
+        .attr("height", height);
+
+    // 绘制散点
+    svg.selectAll("circle")
+        .data(processedData)
+        .enter().append("circle")
+        .attr("cx", d => x(d.experience))
+        .attr("cy", d => y(d.reviews))
+        .attr("r", 5)
+        .attr("fill", "lightblue");
+
+    // 添加 X 轴
+    svg.append("g")
+        .attr("transform", `translate(0,${height - margin.bottom})`)
+        .call(d3.axisBottom(x).ticks(5).tickSizeOuter(0))
+        .selectAll("text")
+        .attr("fill", "white");
+
+    // 添加 Y 轴
+    svg.append("g")
+        .attr("transform", `translate(${margin.left},0)`)
+        .call(d3.axisLeft(y))
+        .selectAll("text")
+        .attr("fill", "white");
+
+    // 添加标题
+    svg.append("text")
+        .attr("x", width / 2)
+        .attr("y", margin.top)
+        .attr("text-anchor", "middle")
+        .style("font-size", "16px")
+        .style("fill", "white")
+        .text("Scatter Plot: Experience vs Reviews");
+
+    // 添加 X 轴标签
+    svg.append("text")
+        .attr("x", width / 2)
+        .attr("y", height - 10)
+        .attr("text-anchor", "middle")
+        .style("fill", "white")
+        .text("Experience (Years)");
+
+    // 添加 Y 轴标签
+    svg.append("text")
+        .attr("x", -(height / 2))
+        .attr("y", 20)
+        .attr("transform", "rotate(-90)")
+        .style("text-anchor", "middle")
+        .style("fill", "white")
+        .text("Total Reviews");
+}
+
+
+
+
+
+
+
+
+
+        
+    </script>
+</body>
+</html>

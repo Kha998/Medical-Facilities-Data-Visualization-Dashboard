@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Medical Data Visualizations</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+        }
+        h1 {
+            text-align: center;
+            margin: 20px 0;
+        }
+        .chart-container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-around;
+        }
+        .chart {
+            width: 45%;
+            margin: 10px;
+        }
+        svg {
+            width: 100%;
+            height: 400px;
+        }
+        .tooltip {
+            position: absolute;
+            text-align: center;
+            background: lightgray;
+            border: 1px solid black;
+            padding: 5px;
+            border-radius: 5px;
+            pointer-events: none;
+            opacity: 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Medical Data Visualizations</h1>
+    <div class="chart-container">
+        <div id="lineChart" class="chart"></div>
+        <div id="histogram" class="chart"></div>
+        <div id="treemap" class="chart"></div>
+        <div id="waterfallChart" class="chart"></div>
+        <div id="barChart" class="chart"></div>
+    </div>
+
+    <script>
+        const tooltip = d3.select("body").append("div").attr("class", "tooltip");
+        let globalData;
+
+        d3.csv("facilities_data.csv").then(data => {
+            globalData = data;
+            renderTreemap(globalData);
+            renderWaterfallChart(globalData);
+            renderBarChart(globalData);
+        });
+
+        // 1. Treemap: Show doctors by specialization with bubble size based on average experience
+        function renderTreemap(data) {
+            const width = 400, height = 400;
+            const groupedData = d3.rollup(data, v => d3.mean(v, d => +d["Experience(Years)"]), d => d.Specialization);
+
+            const processedData = Array.from(groupedData, ([key, value]) => ({ specialization: key, experience: value }))
+                .sort((a, b) => b.experience - a.experience).slice(0, 15); // Top 15
+
+            const root = d3.hierarchy({ children: processedData }).sum(d => d.experience);
+            d3.treemap().size([width, height]).padding(1)(root);
+
+            const svg = d3.select("#treemap").append("svg").attr("width", width).attr("height", height);
+            const cell = svg.selectAll("g").data(root.leaves()).enter().append("g")
+                .attr("transform", d => `translate(${d.x0},${d.y0})`);
+
+            cell.append("rect")
+                .attr("width", d => d.x1 - d.x0)
+                .attr("height", d => d.y1 - d.y0)
+                .attr("fill", "lightblue")
+                .on("mouseover", (event, d) => {
+                    tooltip.style("opacity", 1)
+                        .html(`Specialization: ${d.data.specialization}<br>Avg Experience: ${d.data.experience.toFixed(2)}`)
+                        .style("left", (event.pageX + 10) + "px")
+                        .style("top", (event.pageY - 20) + "px");
+                })
+                .on("mouseout", () => tooltip.style("opacity", 0));
+
+            cell.append("text")
+                .attr("x", 3).attr("y", 15)
+                .text(d => d.data.specialization.length > 10 ? d.data.specialization.slice(0, 10) + "..." : d.data.specialization)
+                .style("font-size", "10px");
+        }
+
+        // 2. Waterfall Chart: Patient Reviews per Specialization
+        function renderWaterfallChart(data) {
+            const width = 400, height = 400, margin = { top: 20, right: 20, bottom: 100, left: 60 };
+
+            const grouped = d3.rollup(data, v => d3.sum(v, d => +d["Total_Reviews"]), d => d.Specialization);
+            const processedData = Array.from(grouped, ([key, value]) => ({ specialization: key, reviews: value }))
+                .sort((a, b) => b.reviews - a.reviews).slice(0, 10);
+
+            const x = d3.scaleBand().domain(processedData.map(d => d.specialization)).range([margin.left, width - margin.right]).padding(0.5);
+            const y = d3.scaleLinear().domain([0, d3.max(processedData, d => d.reviews)]).nice().range([height - margin.bottom, margin.top]);
+
+            const svg = d3.select("#waterfallChart").append("svg").attr("width", width).attr("height", height);
+
+            svg.selectAll("rect")
+                .data(processedData)
+                .enter().append("rect")
+                .attr("x", d => x(d.specialization))
+                .attr("y", d => y(d.reviews))
+                .attr("width", x.bandwidth())
+                .attr("height", d => y(0) - y(d.reviews))
+                .attr("fill", "steelblue");
+        }
+
+        // 3. Bar Chart: Doctor Count by Qualification
+        function renderBarChart(data) {
+            const width = 400, height = 400, margin = { top: 20, right: 20, bottom: 100, left: 60 };
+            const counts = d3.rollup(data, v => v.length, d => d.Qualification);
+
+            const processedData = Array.from(counts, ([key, value]) => ({ qualification: key, count: value }))
+                .sort((a, b) => b.count - a.count).slice(0, 10);
+
+            const x = d3.scaleBand().domain(processedData.map(d => d.qualification)).range([margin.left, width - margin.right]).padding(0.5);
+            const y = d3.scaleLinear().domain([0, d3.max(processedData, d => d.count)]).nice().range([height - margin.bottom, margin.top]);
+
+            const svg = d3.select("#barChart").append("svg").attr("width", width).attr("height", height);
+
+            svg.selectAll("rect")
+                .data(processedData)
+                .enter().append("rect")
+                .attr("x", d => x(d.qualification))
+                .attr("y", d => y(d.count))
+                .attr("width", x.bandwidth())
+                .attr("height", d => y(0) - y(d.count))
+                .attr("fill", "steelblue");
+        }
+    </script>
+</body>
+</html>
